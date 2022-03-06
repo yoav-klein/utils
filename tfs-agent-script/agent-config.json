@@ -1,0 +1,8 @@
+{
+	"tfs_url": "https://dev.azure.com",
+	"collection": "yoavklein25",
+	"pat": "s",
+	"pool": "Global",
+	"user": "<user>",
+	"password": "<password>"
+}

@@ -13,7 +13,7 @@ print_error() {
 	echo -e "${RED}### $1${RESET}"
 }
 
-if ! [ -f agent-config.json ]; then
+if ! [ -f agent.config ]; then
 	print_error "No agent-config.json file found"
 	exit 1
 fi
@@ -36,28 +36,51 @@ install_dependencies() {
 }
 
 read_configuration() {
-	json=$(cat agent-config.json)
-	azp_url=$(echo $json | jq -r '.tfs_url')
-	azp_collection=$(echo $json | jq -r '.collection')
-	azp_pool=$(echo $json | jq -r '.pool')
-	azp_user=$(echo $json | jq -r '.user')
-	azp_password=$(echo $json | jq -r '.password')
+	source agent.config
+	
 	pat=$(cat pat)
 
-	if [ -z "$azp_url" ] || [ -z "$azp_collection" ] || [ -z "$azp_pool" ] || \
-	   [ -z "$azp_user" ] || [ -z "$azp_password" ]; then
-	   print_error "agnet-config.sh is invalid"
+	if [ -z "$AZ_URL" ] || [ -z "$AZ_COLLECTION" ] || [ -z "$AZ_POOL" ] || \
+	   [ -z "$AZ_USER" ] || [ -z "$AZ_PASSWORD" ]; then
+	   print_error "agnet.config is invalid"
 	   exit 1
 	fi
 	
 }
 
+print_line() {
+    printf "* %-40s *\n" "$1"
+}
+
+print_configuration() {
+    echo "***********************************"
+    print_line "Configuration"
+    print_line ""
+    print_line "URL: $AZ_URL"
+    print_line "Collection: $AZ_COLLECTION"
+    print_line "Pool: $AZ_POOL"
+    print_line "User: $AZ_USER"
+    print_line ""
+    echo "***********************************"
+}
+
 download_agent() {
 	print_header "Downloading agent from server"
-	agent_list=$(curl -LsS -u user:$pat "$azp_url/$azp_collection/_apis/distributedtask/packages/agent?platform=linux-x64")
-	agent_url=$(echo "$agent_list" | jq -r '.value[0].downloadUrl')
+	code=$(curl -LsS -u user:$pat "$AZ_URL/$AZ_COLLECTION/_apis/distributedtask/packages/agent?platform=linux-x64" -o agents.txt -w "%{http_code}")
+	if [ "$code" = "401" ] || [ "$code" = "403" ]; then
+	    print_error "Unauthorized ! Check your credentials and make sure you have permissions"
+	fi
+	agent_url=$(cat agents.txt | jq -r '.value[0].downloadUrl')
 	curl -LsS $agent_url -o agent.tar.gz
-	tar -xf agent.tar.gz
+	rm agents.txt
+	
+	if [ -d agent ]; then
+	    rm -rf agent
+	fi 
+	mkdir agent
+	tar -xf agent.tar.gz -C agent
+	rm agent.tar.gz
+	cd agent
 }
 
 configure_agent() {
@@ -67,8 +90,8 @@ configure_agent() {
 	print_header "Configuring agent"
 	./config.sh --unattended \
 	  --agent AgentDocker1 \
-	  --url "$azp_url/$azp_collection" \
-	  --pool "$azp_pool" \
+	  --url "$AZ_URL/$AZ_COLLECTION" \
+	  --pool "$AZ_POOL" \
 	  --auth pat \
 	  --token $pat \
 	  --work "_work" \
@@ -85,6 +108,6 @@ install_dependencies
 read_configuration
 download_agent
 configure_agent
-#install_service
+install_service
 
 
